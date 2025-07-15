@@ -1305,7 +1305,7 @@ public class PlaybackService extends MediaBrowserServiceCompat {
                     new PlaybackStateCompat.CustomAction.Builder(
                     CUSTOM_ACTION_CHANGE_PLAYBACK_SPEED,
                     getString(R.string.playback_speed),
-                    R.drawable.ic_notification_playback_speed
+                    getPlaybackSpeedDrawable(getCurrentPlaybackSpeed())
                 ).build()
             );
         }
@@ -1343,6 +1343,24 @@ public class PlaybackService extends MediaBrowserServiceCompat {
         WearMediaSession.mediaSessionSetExtraForWear(mediaSession);
 
         mediaSession.setPlaybackState(sessionState.build());
+    }
+
+    private int getPlaybackSpeedDrawable(float speed) {
+        // Convert speed to filename format (e.g., 1.25 -> "1_25")
+        @SuppressLint("DefaultLocale") String speedStr = String
+                .format("%.2f", speed)
+                .replace(".", "_");
+        String drawableName = "ic_notification_playback_speed_" + speedStr;
+
+        // Get resource ID dynamically
+        @SuppressLint("DiscouragedApi") int resourceId = getResources().getIdentifier(
+                drawableName,
+                "drawable",
+                getPackageName()
+        );
+
+        // Return the found resource, or fall back to default if not found
+        return resourceId != 0 ? resourceId : R.drawable.ic_notification_playback_speed;
     }
 
     private void updateNotificationAndMediaSession(final Playable p) {
@@ -1994,6 +2012,7 @@ public class PlaybackService extends MediaBrowserServiceCompat {
                         newSpeed = selectedSpeeds.get(speedPosition + 1);
                     }
                     onSetPlaybackSpeed(newSpeed);
+                    updateMediaSession(mediaPlayer.getPlayerStatus());
                 }
             } else if (CUSTOM_ACTION_TOGGLE_SLEEP_TIMER.equals(action)) {
                 if (sleepTimerActive()) {
