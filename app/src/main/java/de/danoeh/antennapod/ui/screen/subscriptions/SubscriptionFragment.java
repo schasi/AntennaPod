@@ -1,7 +1,6 @@
 package de.danoeh.antennapod.ui.screen.subscriptions;
 
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.Log;
@@ -11,7 +10,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ProgressBar;
-
 import androidx.annotation.NonNull;
 import androidx.core.util.Pair;
 import androidx.fragment.app.Fragment;
@@ -19,43 +17,41 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
-
+import com.google.android.material.appbar.AppBarLayout;
+import com.google.android.material.appbar.CollapsingToolbarLayout;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
-
-import de.danoeh.antennapod.model.feed.FeedPreferences;
-import de.danoeh.antennapod.storage.database.DBWriter;
-import de.danoeh.antennapod.ui.common.ConfirmationDialog;
-import de.danoeh.antennapod.ui.screen.AddFeedFragment;
-import de.danoeh.antennapod.ui.screen.SearchFragment;
-import de.danoeh.antennapod.net.download.serviceinterface.FeedUpdateManager;
-import de.danoeh.antennapod.ui.view.FloatingSelectMenu;
-import org.greenrobot.eventbus.EventBus;
-import org.greenrobot.eventbus.Subscribe;
-import org.greenrobot.eventbus.ThreadMode;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.activity.MainActivity;
-import de.danoeh.antennapod.ui.MenuItemUtils;
-import de.danoeh.antennapod.storage.database.DBReader;
-import de.danoeh.antennapod.storage.database.NavDrawerData;
-import de.danoeh.antennapod.ui.screen.feed.RenameFeedDialog;
 import de.danoeh.antennapod.event.FeedListUpdateEvent;
 import de.danoeh.antennapod.event.FeedUpdateRunningEvent;
 import de.danoeh.antennapod.event.UnreadItemsUpdateEvent;
 import de.danoeh.antennapod.model.feed.Feed;
+import de.danoeh.antennapod.model.feed.FeedPreferences;
+import de.danoeh.antennapod.model.feed.SubscriptionsFilter;
+import de.danoeh.antennapod.net.download.serviceinterface.FeedUpdateManager;
+import de.danoeh.antennapod.storage.database.DBReader;
+import de.danoeh.antennapod.storage.database.NavDrawerData;
 import de.danoeh.antennapod.storage.preferences.UserPreferences;
-import de.danoeh.antennapod.ui.statistics.StatisticsFragment;
+import de.danoeh.antennapod.ui.MenuItemUtils;
+import de.danoeh.antennapod.ui.screen.AddFeedFragment;
+import de.danoeh.antennapod.ui.screen.SearchFragment;
+
 import de.danoeh.antennapod.ui.view.EmptyViewHandler;
+import de.danoeh.antennapod.ui.view.FloatingSelectMenu;
+import de.danoeh.antennapod.ui.view.ItemOffsetDecoration;
 import de.danoeh.antennapod.ui.view.LiftOnScrollListener;
-import io.reactivex.Observable;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
+import org.greenrobot.eventbus.ThreadMode;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * Fragment for displaying feed subscriptions
@@ -66,8 +62,9 @@ public class SubscriptionFragment extends Fragment
     public static final String TAG = "SubscriptionFragment";
     private static final String PREFS = "SubscriptionFragment";
     private static final String PREF_NUM_COLUMNS = "columns";
+    private static final String PREF_LAST_TAG = "last_tag";
     private static final String KEY_UP_ARROW = "up_arrow";
-    private static final String ARGUMENT_FOLDER = "folder";
+    private static final String ARGUMENT_STATE = "state";
 
     private static final int MIN_NUM_COLUMNS = 1;
     private static final int[] COLUMN_CHECKBOX_IDS = {
@@ -79,13 +76,16 @@ public class SubscriptionFragment extends Fragment
 
     private RecyclerView subscriptionRecycler;
     private SubscriptionsRecyclerAdapter subscriptionAdapter;
+    private RecyclerView tagsRecycler;
+    private SubscriptionTagAdapter tagAdapter;
     private EmptyViewHandler emptyView;
     private View feedsFilteredMsg;
     private MaterialToolbar toolbar;
     private SwipeRefreshLayout swipeRefreshLayout;
     private ProgressBar progressBar;
-    private String displayedFolder = null;
+    private CollapsingToolbarLayout collapsingContainer;
     private boolean displayUpArrow;
+    private boolean shouldShowTags = false;
 
     private Disposable disposable;
     private SharedPreferences prefs;
@@ -94,12 +94,13 @@ public class SubscriptionFragment extends Fragment
     private FloatingActionButton subscriptionAddButton;
     private FloatingSelectMenu floatingSelectMenu;
     private RecyclerView.ItemDecoration itemDecoration;
-    private List<NavDrawerData.DrawerItem> listItems;
+    private List<Feed> feeds;
+    private int stateToShow = Feed.STATE_SUBSCRIBED;
 
-    public static SubscriptionFragment newInstance(String folderTitle) {
+    public static SubscriptionFragment newInstance(int state) {
         SubscriptionFragment fragment = new SubscriptionFragment();
         Bundle args = new Bundle();
-        args.putString(ARGUMENT_FOLDER, folderTitle);
+        args.putInt(ARGUMENT_STATE, state);
         fragment.setArguments(args);
         return fragment;
     }
@@ -108,6 +109,9 @@ public class SubscriptionFragment extends Fragment
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = requireActivity().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (getArguments() != null) {
+            stateToShow = getArguments().getInt(ARGUMENT_STATE, Feed.STATE_SUBSCRIBED);
+        }
     }
 
     @Override
@@ -134,21 +138,17 @@ public class SubscriptionFragment extends Fragment
         }
         refreshToolbarState();
 
-        if (getArguments() != null) {
-            displayedFolder = getArguments().getString(ARGUMENT_FOLDER, null);
-            if (displayedFolder != null) {
-                toolbar.setTitle(displayedFolder);
-            }
-        }
-
+        collapsingContainer = root.findViewById(R.id.collapsing_container);
         subscriptionRecycler = root.findViewById(R.id.subscriptions_grid);
         registerForContextMenu(subscriptionRecycler);
         subscriptionRecycler.addOnScrollListener(new LiftOnScrollListener(root.findViewById(R.id.appbar)));
+        subscriptionRecycler.addOnScrollListener(new LiftOnScrollListener(collapsingContainer));
         subscriptionAdapter = new SubscriptionsRecyclerAdapter((MainActivity) getActivity()) {
             @Override
-            public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
-                super.onCreateContextMenu(menu, v, menuInfo);
-                MenuItemUtils.setOnClickListeners(menu, SubscriptionFragment.this::onContextItemSelected);
+            protected void onSelectedItemsUpdated() {
+                super.onSelectedItemsUpdated();
+                FeedMenuHandler.onPrepareMenu(floatingSelectMenu.getMenu(), getSelectedItems());
+                floatingSelectMenu.updateItemVisibility();
             }
         };
         setColumnNumber(prefs.getInt(PREF_NUM_COLUMNS, getDefaultNumOfColumns()));
@@ -180,12 +180,52 @@ public class SubscriptionFragment extends Fragment
 
         floatingSelectMenu = root.findViewById(R.id.floatingSelectMenu);
         floatingSelectMenu.inflate(R.menu.nav_feed_action_speeddial);
+        if (stateToShow == Feed.STATE_ARCHIVED) {
+            toolbar.setTitle(R.string.archive_feed_label_noun);
+            toolbar.getMenu().removeItem(R.id.subscriptions_filter);
+            toolbar.getMenu().removeItem(R.id.refresh_item);
+            toolbar.getMenu().removeItem(R.id.subscriptions_counter);
+            toolbar.getMenu().removeItem(R.id.show_archive);
+            floatingSelectMenu.getMenu().removeItem(R.id.keep_updated);
+            floatingSelectMenu.getMenu().removeItem(R.id.notify_new_episodes);
+            floatingSelectMenu.getMenu().removeItem(R.id.autodownload);
+            floatingSelectMenu.getMenu().removeItem(R.id.autoDeleteDownload);
+            floatingSelectMenu.getMenu().removeItem(R.id.playback_speed);
+            subscriptionAddButton.setVisibility(View.GONE);
+        }
         floatingSelectMenu.setOnMenuItemClickListener(menuItem -> {
-            new FeedMultiSelectActionHandler(getActivity(), subscriptionAdapter.getSelectedItems())
+            List<Feed> selection = subscriptionAdapter.getSelectedItems();
+            new FeedMultiSelectActionHandler(getActivity(), selection)
                     .handleAction(menuItem.getItemId());
+            if (selection.size() <= 1) {
+                subscriptionAdapter.endSelectMode();
+            }
             return true;
         });
 
+        tagsRecycler = root.findViewById(R.id.tags_recycler);
+        tagsRecycler.setLayoutManager(new LinearLayoutManager(getContext(), LinearLayoutManager.HORIZONTAL, false));
+        tagsRecycler.addItemDecoration(new ItemOffsetDecoration(getContext(), 4, 0));
+        registerForContextMenu(tagsRecycler);
+        tagAdapter = new SubscriptionTagAdapter(getActivity()) {
+            @Override
+            public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
+                super.onCreateContextMenu(menu, v, menuInfo);
+                MenuItemUtils.setOnClickListeners(menu, SubscriptionFragment.this::onTagContextItemSelected);
+            }
+
+            @Override
+            protected void onTagClick(NavDrawerData.TagItem tag) {
+                tagAdapter.setSelectedTag(tag.getTitle());
+                loadSubscriptionsAndTags();
+            }
+        };
+        if (stateToShow == Feed.STATE_SUBSCRIBED) {
+            tagAdapter.setSelectedTag(prefs.getString(PREF_LAST_TAG, FeedPreferences.TAG_ROOT));
+        } else {
+            tagAdapter.setSelectedTag(FeedPreferences.TAG_ROOT);
+        }
+        tagsRecycler.setAdapter(tagAdapter);
         return root;
     }
 
@@ -220,6 +260,9 @@ public class SubscriptionFragment extends Fragment
         } else if (itemId == R.id.subscriptions_sort) {
             FeedSortDialog.showDialog(requireContext());
             return true;
+        } else if (itemId == R.id.subscriptions_counter) {
+            FeedCounterDialog.showDialog(requireContext());
+            return true;
         } else if (itemId == R.id.subscription_display_list) {
             setColumnNumber(1);
             return true;
@@ -236,15 +279,20 @@ public class SubscriptionFragment extends Fragment
             setColumnNumber(5);
             return true;
         } else if (itemId == R.id.action_search) {
-            ((MainActivity) getActivity()).loadChildFragment(SearchFragment.newInstance());
-            return true;
-        } else if (itemId == R.id.action_statistics) {
-            ((MainActivity) getActivity()).loadChildFragment(new StatisticsFragment());
+            if (stateToShow == Feed.STATE_ARCHIVED) {
+                ((MainActivity) getActivity()).loadChildFragment(SearchFragment.newInstanceArchive());
+            } else {
+                ((MainActivity) getActivity()).loadChildFragment(SearchFragment.newInstance());
+            }
             return true;
         } else if (itemId == R.id.pref_show_subscription_title) {
             item.setChecked(!item.isChecked());
             UserPreferences.setShouldShowSubscriptionTitle(item.isChecked());
             subscriptionAdapter.notifyDataSetChanged();
+        } else if (itemId == R.id.show_archive) {
+            Fragment fragment = SubscriptionFragment.newInstance(Feed.STATE_ARCHIVED);
+            ((MainActivity) getActivity()).loadChildFragment(fragment);
+            return true;
         }
         return false;
     }
@@ -273,8 +321,13 @@ public class SubscriptionFragment extends Fragment
     private void setupEmptyView() {
         emptyView = new EmptyViewHandler(getContext());
         emptyView.setIcon(R.drawable.ic_subscriptions);
-        emptyView.setTitle(R.string.no_subscriptions_head_label);
-        emptyView.setMessage(R.string.no_subscriptions_label);
+        if (stateToShow == Feed.STATE_ARCHIVED) {
+            emptyView.setTitle(R.string.no_archive_head_label);
+            emptyView.setMessage(R.string.no_archive_label);
+        } else {
+            emptyView.setTitle(R.string.no_subscriptions_head_label);
+            emptyView.setMessage(R.string.no_subscriptions_label);
+        }
         emptyView.attachToRecyclerView(subscriptionRecycler);
     }
 
@@ -282,13 +335,16 @@ public class SubscriptionFragment extends Fragment
     public void onStart() {
         super.onStart();
         EventBus.getDefault().register(this);
-        loadSubscriptions();
+        loadSubscriptionsAndTags();
     }
 
     @Override
     public void onPause() {
         super.onPause();
         scrollPosition = getScrollPosition();
+        if (stateToShow == Feed.STATE_SUBSCRIBED) {
+            prefs.edit().putString(PREF_LAST_TAG, tagAdapter.getSelectedTag()).apply();
+        }
     }
 
     @Override
@@ -303,44 +359,89 @@ public class SubscriptionFragment extends Fragment
         }
     }
 
-    private void loadSubscriptions() {
+    private void loadSubscriptionsAndTags() {
         if (disposable != null) {
             disposable.dispose();
         }
+        SubscriptionsFilter filter = stateToShow == Feed.STATE_SUBSCRIBED
+                ? UserPreferences.getSubscriptionsFilter() : new SubscriptionsFilter("");
         emptyView.hide();
         disposable = Observable.fromCallable(
-                () -> {
-                    NavDrawerData data = DBReader.getNavDrawerData(UserPreferences.getSubscriptionsFilter(),
-                            UserPreferences.getFeedOrder(), UserPreferences.getFeedCounterSetting());
-                    List<NavDrawerData.DrawerItem> items = data.items;
-                    for (NavDrawerData.DrawerItem item : items) {
-                        if (item.type == NavDrawerData.DrawerItem.Type.TAG
-                                && item.getTitle().equals(displayedFolder)) {
-                            return ((NavDrawerData.TagDrawerItem) item).getChildren();
-                        }
-                    }
-                    return items;
-                })
+                        () -> {
+                            NavDrawerData navDrawerData = DBReader.getNavDrawerData(filter,
+                                    UserPreferences.getFeedOrder(), UserPreferences.getFeedCounterSetting(),
+                                    stateToShow);
+                            List<NavDrawerData.TagItem> tags = DBReader.getAllTags(stateToShow);
+                            return new Pair<>(navDrawerData, tags);
+                        })
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(
                     result -> {
-                        final boolean firstLoaded = listItems == null || listItems.isEmpty();
-                        if (listItems != null && listItems.size() > result.size()) {
+                        List<Feed> openedFolderFeeds = Collections.emptyList();
+                        if (FeedPreferences.TAG_ROOT.equals(tagAdapter.getSelectedTag())) {
+                            openedFolderFeeds = result.first.feeds;
+                        } else {
+                            boolean tagExists = false;
+                            for (NavDrawerData.TagItem tag : result.first.tags) { // Filtered list
+                                if (tag.getTitle().equals(tagAdapter.getSelectedTag())) {
+                                    openedFolderFeeds = tag.getFeeds();
+                                    tagExists = true;
+                                    break;
+                                }
+                            }
+                            if (!tagExists) {
+                                tagAdapter.setSelectedTag(FeedPreferences.TAG_ROOT);
+                                openedFolderFeeds = result.first.feeds;
+                            }
+                        }
+
+                        final boolean firstLoaded = feeds == null || feeds.isEmpty();
+                        if (feeds != null && feeds.size() > openedFolderFeeds.size()) {
                             // We have fewer items. This can result in items being selected that are no longer visible.
                             subscriptionAdapter.endSelectMode();
                         }
-                        listItems = result;
+                        feeds = openedFolderFeeds;
                         progressBar.setVisibility(View.GONE);
-                        subscriptionAdapter.setItems(result);
+                        subscriptionAdapter.setItems(feeds, result.first.feedCounters);
                         if (firstLoaded) {
                             restoreScrollPosition(scrollPosition);
                         }
                         emptyView.updateVisibility();
+                        shouldShowTags = false;
+                        if (tagAdapter != null) {
+                            tagAdapter.setTags(result.second);
+                            for (NavDrawerData.TagItem tag : result.second) {
+                                if (!FeedPreferences.TAG_ROOT.equals(tag.getTitle())
+                                        && !FeedPreferences.TAG_UNTAGGED.equals(tag.getTitle())) {
+                                    shouldShowTags = true;
+                                    break;
+                                }
+                            }
+                            tagsRecycler.setVisibility(shouldShowTags ? View.VISIBLE : View.GONE);
+                            // Scroll to center the selected tag
+                            tagsRecycler.post(() -> {
+                                int selectedPosition = tagAdapter.getSelectedTagPosition();
+                                if (selectedPosition < 0) {
+                                    return;
+                                }
+                                LinearLayoutManager layoutManager =
+                                        (LinearLayoutManager) tagsRecycler.getLayoutManager();
+                                // Calculate offset to center the selected chip
+                                View selectedView = layoutManager.findViewByPosition(selectedPosition);
+                                if (selectedView != null) {
+                                    int recyclerWidth = tagsRecycler.getWidth();
+                                    int chipWidth = selectedView.getWidth();
+                                    int offset = (recyclerWidth - chipWidth) / 2;
+                                    layoutManager.scrollToPositionWithOffset(selectedPosition, offset);
+                                } else {
+                                    tagsRecycler.scrollToPosition(selectedPosition);
+                                }
+                            });
+                        }
                     }, error -> {
                         Log.e(TAG, Log.getStackTraceString(error));
                     });
-
         updateFilterVisibility();
     }
 
@@ -358,76 +459,49 @@ public class SubscriptionFragment extends Fragment
         return getResources().getInteger(R.integer.subscriptions_default_num_of_columns);
     }
 
-    @Override
-    public boolean onContextItemSelected(MenuItem item) {
-        NavDrawerData.DrawerItem drawerItem = subscriptionAdapter.getSelectedItem();
-        if (drawerItem == null) {
+    private boolean onTagContextItemSelected(MenuItem item) {
+        NavDrawerData.TagItem selectedTag = tagAdapter.getLongPressedItem();
+        if (selectedTag == null) {
             return false;
         }
-        int itemId = item.getItemId();
-        if (drawerItem.type == NavDrawerData.DrawerItem.Type.TAG) {
-            if (itemId == R.id.rename_folder_item) {
-                new RenameFeedDialog(getActivity(), drawerItem).show();
-                return true;
-            } else if (itemId == R.id.delete_folder_item) {
-                ConfirmationDialog dialog = new ConfirmationDialog(
-                        getContext(), R.string.delete_tag_label,
-                        getString(R.string.delete_tag_confirmation, drawerItem.getTitle())) {
-
-                    @Override
-                    public void onConfirmButtonPressed(DialogInterface dialog) {
-                        List<NavDrawerData.DrawerItem> feeds = ((NavDrawerData.TagDrawerItem) drawerItem).getChildren();
-
-                        for (NavDrawerData.DrawerItem feed : feeds) {
-                            FeedPreferences preferences = ((NavDrawerData.FeedDrawerItem) feed).feed.getPreferences();
-                            preferences.getTags().remove(drawerItem.getTitle());
-                            DBWriter.setFeedPreferences(preferences);
-                        }
-                    }
-                };
-                dialog.createNewDialog().show();
-
-                return true;
-            }
-        }
-
-        Feed feed = ((NavDrawerData.FeedDrawerItem) drawerItem).feed;
-        if (itemId == R.id.multi_select) {
-            return subscriptionAdapter.onContextItemSelected(item);
-        }
-        return FeedMenuHandler.onMenuItemClicked(this, item.getItemId(), feed, this::loadSubscriptions);
+        return TagMenuHandler.onMenuItemClicked(this, selectedTag, item, tagAdapter);
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onFeedListChanged(FeedListUpdateEvent event) {
-        loadSubscriptions();
+        loadSubscriptionsAndTags();
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onUnreadItemsChanged(UnreadItemsUpdateEvent event) {
-        loadSubscriptions();
+        loadSubscriptionsAndTags();
+    }
+
+    private void setCollapsingToolbarFlags(int flags) {
+        AppBarLayout.LayoutParams params = (AppBarLayout.LayoutParams) collapsingContainer.getLayoutParams();
+        params.setScrollFlags(flags);
+        collapsingContainer.setLayoutParams(params);
     }
 
     @Override
     public void onEndSelectMode() {
         floatingSelectMenu.setVisibility(View.GONE);
         subscriptionAddButton.setVisibility(View.VISIBLE);
-        subscriptionAdapter.setItems(listItems);
+        tagsRecycler.setVisibility(shouldShowTags ? View.VISIBLE : View.GONE);
         updateFilterVisibility();
+        setCollapsingToolbarFlags(AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL
+                | AppBarLayout.LayoutParams.SCROLL_FLAG_ENTER_ALWAYS
+                | AppBarLayout.LayoutParams.SCROLL_FLAG_EXIT_UNTIL_COLLAPSED);
     }
 
     @Override
     public void onStartSelectMode() {
-        List<NavDrawerData.DrawerItem> feedsOnly = new ArrayList<>();
-        for (NavDrawerData.DrawerItem item : listItems) {
-            if (item.type == NavDrawerData.DrawerItem.Type.FEED) {
-                feedsOnly.add(item);
-            }
-        }
-        subscriptionAdapter.setItems(feedsOnly);
         floatingSelectMenu.setVisibility(View.VISIBLE);
         subscriptionAddButton.setVisibility(View.GONE);
+        tagsRecycler.setVisibility(shouldShowTags ? View.INVISIBLE : View.GONE);
         updateFilterVisibility();
+        setCollapsingToolbarFlags(AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL
+                | AppBarLayout.LayoutParams.SCROLL_FLAG_EXIT_UNTIL_COLLAPSED);
     }
 
     public Pair<Integer, Integer> getScrollPosition() {

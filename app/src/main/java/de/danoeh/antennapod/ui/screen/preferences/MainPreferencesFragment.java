@@ -1,6 +1,5 @@
 package de.danoeh.antennapod.ui.screen.preferences;
 
-import android.content.Intent;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.os.Bundle;
@@ -15,6 +14,7 @@ import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.ui.common.IntentUtils;
 import de.danoeh.antennapod.ui.preferences.screen.AnimatedPreferenceFragment;
 import de.danoeh.antennapod.ui.preferences.screen.about.AboutFragment;
+import de.danoeh.antennapod.ui.preferences.screen.bugreport.BugReportFragment;
 
 public class MainPreferencesFragment extends AnimatedPreferenceFragment {
 
@@ -104,8 +104,7 @@ public class MainPreferencesFragment extends AnimatedPreferenceFragment {
                 }
         );
         findPreference(PREF_DOCUMENTATION).setOnPreferenceClickListener(preference -> {
-            IntentUtils.openInBrowser(getContext(),
-                    IntentUtils.getLocalizedWebsiteLink(getContext()) + "/documentation/");
+            IntentUtils.openInBrowser(getContext(), "https://antennapod.org/documentation/");
             return true;
         });
         findPreference(PREF_VIEW_FORUM).setOnPreferenceClickListener(preference -> {
@@ -113,12 +112,13 @@ public class MainPreferencesFragment extends AnimatedPreferenceFragment {
             return true;
         });
         findPreference(PREF_CONTRIBUTE).setOnPreferenceClickListener(preference -> {
-            IntentUtils.openInBrowser(getContext(),
-                    IntentUtils.getLocalizedWebsiteLink(getContext()) + "/contribute/");
+            IntentUtils.openInBrowser(getContext(), "https://antennapod.org/contribute/");
             return true;
         });
         findPreference(PREF_SEND_BUG_REPORT).setOnPreferenceClickListener(preference -> {
-            startActivity(new Intent(getActivity(), BugReportActivity.class));
+            getParentFragmentManager().beginTransaction()
+                    .replace(R.id.settingsContainer, new BugReportFragment())
+                    .addToBackStack(getString(R.string.report_bug_title)).commit();
             return true;
         });
     }

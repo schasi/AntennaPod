@@ -12,7 +12,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url "https://jitpack.io" }
         mavenLocal()
     }
 }
@@ -20,6 +19,7 @@ dependencyResolutionManagement {
 include ':app'
 include ':event'
 include ':model'
+include ':system'
 
 include ':net:common'
 include ':net:discovery'
@@ -39,6 +39,7 @@ include ':playback:cast'
 include ':playback:service'
 
 include ':storage:database'
+include ':storage:database-maintenance-service'
 include ':storage:importexport'
 include ':storage:preferences'
 

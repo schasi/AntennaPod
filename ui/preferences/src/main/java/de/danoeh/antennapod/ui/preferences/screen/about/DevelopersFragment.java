@@ -9,11 +9,11 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.ListFragment;
 
 import de.danoeh.antennapod.ui.common.IntentUtils;
-import io.reactivex.Single;
-import io.reactivex.SingleOnSubscribe;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.core.SingleOnSubscribe;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -30,15 +30,18 @@ public class DevelopersFragment extends ListFragment {
 
         developersLoader = Single.create((SingleOnSubscribe<ArrayList<SimpleIconListAdapter.ListItem>>) emitter -> {
             developers.clear();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(
-                    getContext().getAssets().open("developers.csv"), "UTF-8"));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String[] info = line.split(";");
-                developers.add(new SimpleIconListAdapter.ListItem(info[0], info[2],
-                        "https://avatars2.githubusercontent.com/u/" + info[1] + "?s=60&v=4"));
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                    getContext().getAssets().open("developers.csv"), "UTF-8"))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] info = line.split(";");
+                    developers.add(new SimpleIconListAdapter.ListItem(info[0], info[2],
+                            "https://avatars2.githubusercontent.com/u/" + info[1] + "?s=60&v=4"));
+                }
+                emitter.onSuccess(developers);
+            } catch (Exception e) {
+                emitter.onError(e);
             }
-            emitter.onSuccess(developers);
         })
         .subscribeOn(Schedulers.io())
         .observeOn(AndroidSchedulers.mainThread())

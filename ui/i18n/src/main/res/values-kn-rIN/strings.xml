@@ -94,13 +94,10 @@
     <string name="episode_cleanup_never">ಎಂದಿಗೂ</string>
     <string name="show_info_label">ಮಾಹಿತಿ ತೋರಿಸಿ</string>
     <string name="remove_feed_label">ಪಾಡ್ಕ್ಯಾಸ್ಟನ್ನು ತೆಗೆದುಹಾಕಿ</string>
-    <string name="feed_remover_msg">ಪಾಡ್ಕ್ಯಾಸ್ಟನ್ನು ತೆಗೆದುಹಾಕಲಾಗುತ್ತಿದೆ</string>
     <!--actions on feeditems-->
   <string name="download_label">ಡೌನ್ಲೋಡ್</string>
     <string name="play_label">ಚಾಲನೆಗೊಳಿಸಿ</string>
     <string name="stream_label">ಸ್ಟ್ರೀಮ್ ಮಾಡಿ</string>
-    <string name="mark_read_label">ಕೇಳಿಸಿದೆ ಎಂದು ಗುರುತಿಸಿ</string>
-    <string name="mark_unread_label">ಕೇಳಿಸಿಕೊಂಡಿಲ್ಲವೆಂದು ಗುರುತಿಸಿ</string>
     <!--Download messages and labels-->
   <string name="download_successful">ಯಶಸ್ವಿಯಾಗಿದೆ</string>
     <string name="download_pending">ಡೌನ್ಲೋಡ್ ಬಾಕಿ ಉಳಿದಿದೆ</string>

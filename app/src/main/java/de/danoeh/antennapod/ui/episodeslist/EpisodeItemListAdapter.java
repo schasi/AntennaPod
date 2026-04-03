@@ -1,7 +1,6 @@
 package de.danoeh.antennapod.ui.episodeslist;
 
 import android.app.Activity;
-import android.os.Build;
 import android.view.ContextMenu;
 import android.view.InputDevice;
 import android.view.MenuInflater;
@@ -111,20 +110,19 @@ public class EpisodeItemListAdapter extends SelectableAdapter<EpisodeItemViewHol
             return false;
         });
         holder.itemView.setOnTouchListener((v, e) -> {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (e.isFromSource(InputDevice.SOURCE_MOUSE)
-                        && e.getButtonState() == MotionEvent.BUTTON_SECONDARY) {
-                    longPressedItem = item;
-                    longPressedPosition = holder.getBindingAdapterPosition();
-                    return false;
-                }
+            if (e.isFromSource(InputDevice.SOURCE_MOUSE)
+                    && e.getButtonState() == MotionEvent.BUTTON_SECONDARY) {
+                longPressedItem = item;
+                longPressedPosition = holder.getBindingAdapterPosition();
+                return false;
             }
             return false;
         });
 
         holder.itemView.setSelected(false);
         if (inActionMode()) {
-            holder.secondaryActionButton.setOnClickListener(null);
+            holder.secondaryActionButton.setOnClickListener(
+                    v -> toggleSelection(holder.getBindingAdapterPosition()));
             if (isSelected(pos)) {
                 holder.itemView.setSelected(true);
                 holder.itemView.setBackgroundColor(0x88000000
@@ -203,27 +201,19 @@ public class EpisodeItemListAdapter extends SelectableAdapter<EpisodeItemViewHol
     public void onCreateContextMenu(final ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
         MenuInflater inflater = mainActivityRef.get().getMenuInflater();
         if (inActionMode()) {
-            inflater.inflate(R.menu.multi_select_context_popup, menu);
-        } else {
-            if (longPressedItem == null) {
-                return;
-            }
-            inflater.inflate(R.menu.feeditemlist_context, menu);
-            menu.setHeaderTitle(longPressedItem.getTitle());
-            FeedItemMenuHandler.onPrepareMenu(menu, Collections.singletonList(longPressedItem), R.id.skip_episode_item);
+            return;
         }
+        if (longPressedItem == null) {
+            return;
+        }
+        inflater.inflate(R.menu.feeditemlist_context, menu);
+        menu.setHeaderTitle(longPressedItem.getTitle());
+        FeedItemMenuHandler.onPrepareMenu(menu, Collections.singletonList(longPressedItem), R.id.skip_episode_item);
     }
 
     public boolean onContextItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.multi_select) {
             startSelectMode(longPressedPosition);
-            return true;
-        } else if (item.getItemId() == R.id.select_all_above) {
-            setSelected(0, longPressedPosition, true);
-            return true;
-        } else if (item.getItemId() == R.id.select_all_below) {
-            shouldSelectLazyLoadedItems = true;
-            setSelected(longPressedPosition + 1, getItemCount(), true);
             return true;
         }
         return false;

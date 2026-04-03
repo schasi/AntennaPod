@@ -9,7 +9,6 @@ import android.view.KeyEvent;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 import androidx.core.app.NotificationCompat;
 import androidx.preference.PreferenceManager;
 
@@ -64,6 +63,7 @@ public abstract class UserPreferences {
     public static final String PREF_BACK_OPENS_DRAWER = "prefBackButtonOpensDrawer";
     public static final String PREF_BOTTOM_NAVIGATION = "prefBottomNavigation";
 
+    public static final String PREF_GLOBAL_DEFAULT_SORTED_ORDER = "prefGlobalDefaultSortedOrder";
     public static final String PREF_QUEUE_KEEP_SORTED = "prefQueueKeepSorted";
     public static final String PREF_QUEUE_KEEP_SORTED_ORDER = "prefQueueKeepSortedOrder";
     public static final String PREF_NEW_EPISODES_ACTION = "prefNewEpisodesAction";
@@ -94,8 +94,8 @@ public abstract class UserPreferences {
     // Network
     private static final String PREF_ENQUEUE_DOWNLOADED = "prefEnqueueDownloaded";
     public static final String PREF_ENQUEUE_LOCATION = "prefEnqueueLocation";
-    public static final String PREF_UPDATE_INTERVAL = "prefAutoUpdateIntervall";
-    private static final String PREF_MOBILE_UPDATE = "prefMobileUpdateTypes";
+    public static final String PREF_UPDATE_INTERVAL_MINUTES = "prefAutoUpdateIntervall";
+    public static final String PREF_MOBILE_UPDATE = "prefMobileUpdateTypes";
     public static final String PREF_EPISODE_CLEANUP = "prefEpisodeCleanup";
     public static final String PREF_EPISODE_CACHE_SIZE = "prefEpisodeCacheSize";
     public static final String PREF_AUTODL_GLOBAL = "prefEnableAutoDl";
@@ -225,7 +225,7 @@ public abstract class UserPreferences {
 
     public static List<Integer> getFullNotificationButtons() {
         String[] buttons = TextUtils.split(
-            prefs.getString(PREF_FULL_NOTIFICATION_BUTTONS,
+                prefs.getString(PREF_FULL_NOTIFICATION_BUTTONS,
                 NOTIFICATION_BUTTON_SKIP + "," + NOTIFICATION_BUTTON_PLAYBACK_SPEED), ",");
 
         List<Integer> notificationButtons = new ArrayList<>();
@@ -276,6 +276,10 @@ public abstract class UserPreferences {
     public static FeedCounter getFeedCounterSetting() {
         String value = prefs.getString(PREF_DRAWER_FEED_COUNTER, "" + FeedCounter.SHOW_NEW.id);
         return FeedCounter.fromOrdinal(Integer.parseInt(value));
+    }
+
+    public static void setFeedCounterSetting(FeedCounter counter) {
+        prefs.edit().putString(PREF_DRAWER_FEED_COUNTER, "" + counter.id).apply();
     }
 
     /**
@@ -396,7 +400,6 @@ public abstract class UserPreferences {
     /**
      * Set to true to enable Continuous Playback
      */
-    @VisibleForTesting
     public static void setFollowQueue(boolean value) {
         prefs.edit().putBoolean(UserPreferences.PREF_FOLLOW_QUEUE, value).apply();
     }
@@ -452,7 +455,11 @@ public abstract class UserPreferences {
     }
 
     public static long getUpdateInterval() {
-        return Integer.parseInt(prefs.getString(PREF_UPDATE_INTERVAL, "12"));
+        return Integer.parseInt(prefs.getString(PREF_UPDATE_INTERVAL_MINUTES, "720"));
+    }
+
+    public static void setUpdateInterval(long interval) {
+        prefs.edit().putString(PREF_UPDATE_INTERVAL_MINUTES, String.valueOf(interval)).apply();
     }
 
     public static boolean isAutoUpdateDisabled() {
@@ -750,7 +757,7 @@ public abstract class UserPreferences {
     }
 
     public static boolean isBottomNavigationEnabled() {
-        return prefs.getBoolean(PREF_BOTTOM_NAVIGATION, false);
+        return prefs.getBoolean(PREF_BOTTOM_NAVIGATION, true);
     }
 
     public static void setBottomNavigationEnabled(boolean enabled) {
@@ -855,6 +862,15 @@ public abstract class UserPreferences {
 
     public static void setShouldShowSubscriptionTitle(boolean show) {
         prefs.edit().putBoolean(PREF_SUBSCRIPTION_TITLE, show).apply();
+    }
+
+    public static void setPrefGlobalSortedOrder(SortOrder sortOrder) {
+        prefs.edit().putString(PREF_GLOBAL_DEFAULT_SORTED_ORDER, "" + sortOrder.code).apply();
+    }
+
+    public static SortOrder getPrefGlobalSortedOrder() {
+        return SortOrder.fromCodeString(prefs.getString(PREF_GLOBAL_DEFAULT_SORTED_ORDER,
+                "" + SortOrder.DATE_NEW_OLD.code));
     }
 
     public static void setAllEpisodesSortOrder(SortOrder s) {

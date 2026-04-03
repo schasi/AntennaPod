@@ -100,7 +100,7 @@
             android:windowSoftInputMode="stateAlwaysHidden"
             android:launchMode="singleTask"
             android:exported="true">
-            <intent-filter>
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -111,7 +111,7 @@
                     android:pathPrefix="/deeplink/main"
                     android:scheme="https" />
             </intent-filter>
-            <intent-filter>
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -164,13 +164,6 @@
                 <data android:scheme="https"/>
             </intent-filter>
         </activity>
-        <activity
-            android:name=".ui.screen.preferences.BugReportActivity"
-            android:label="@string/bug_report_title">
-            <meta-data
-                    android:name="android.support.PARENT_ACTIVITY"
-                    android:value="de.danoeh.antennapod.ui.screen.preferences.PreferenceActivity"/>
-        </activity>
 
         <activity
             android:name=".ui.screen.playback.video.VideoplayerActivity"
@@ -184,6 +177,19 @@
                 android:value="de.danoeh.antennapod.activity.MainActivity"/>
             <intent-filter>
                 <action android:name="de.danoeh.antennapod.intents.VIDEO_PLAYER" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ui.screen.playback.video.Media3VideoPlayerActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize"
+            android:supportsPictureInPicture="true"
+            android:screenOrientation="sensorLandscape"
+            android:exported="true"
+            tools:ignore="DiscouragedApi">
+            <intent-filter>
+                <action android:name="de.danoeh.antennapod.intents.VIDEO_PLAYER_MEDIA3" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>

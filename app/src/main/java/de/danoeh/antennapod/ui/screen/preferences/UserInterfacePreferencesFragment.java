@@ -6,27 +6,23 @@ import android.os.Build;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.ListView;
-
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.app.ActivityCompat;
 import androidx.preference.Preference;
-
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
-
+import de.danoeh.antennapod.R;
+import de.danoeh.antennapod.event.PlayerStatusEvent;
+import de.danoeh.antennapod.event.UnreadItemsUpdateEvent;
 import de.danoeh.antennapod.storage.preferences.UsageStatistics;
+import de.danoeh.antennapod.storage.preferences.UserPreferences;
 import de.danoeh.antennapod.ui.preferences.screen.AnimatedPreferenceFragment;
-import de.danoeh.antennapod.ui.screen.subscriptions.FeedSortDialog;
+import de.danoeh.antennapod.ui.screen.drawer.DrawerPreferencesDialog;
+import de.danoeh.antennapod.ui.screen.subscriptions.EpisodeListGlobalDefaultSortDialog;
+
 import org.greenrobot.eventbus.EventBus;
 
 import java.util.List;
-
-import de.danoeh.antennapod.R;
-import de.danoeh.antennapod.ui.screen.drawer.DrawerPreferencesDialog;
-import de.danoeh.antennapod.ui.screen.subscriptions.SubscriptionsFilterDialog;
-import de.danoeh.antennapod.event.PlayerStatusEvent;
-import de.danoeh.antennapod.event.UnreadItemsUpdateEvent;
-import de.danoeh.antennapod.storage.preferences.UserPreferences;
 
 public class UserInterfacePreferencesFragment extends AnimatedPreferenceFragment {
     private static final String PREF_SWIPE = "prefSwipe";
@@ -76,15 +72,10 @@ public class UserInterfacePreferencesFragment extends AnimatedPreferenceFragment
                     showFullNotificationButtonsDialog();
                     return true;
                 });
-        findPreference(UserPreferences.PREF_FILTER_FEED)
+        findPreference(UserPreferences.PREF_GLOBAL_DEFAULT_SORTED_ORDER)
                 .setOnPreferenceClickListener((preference -> {
-                    new SubscriptionsFilterDialog().show(getChildFragmentManager(), "filter");
-                    return true;
-                }));
-
-        findPreference(UserPreferences.PREF_DRAWER_FEED_ORDER)
-                .setOnPreferenceClickListener((preference -> {
-                    FeedSortDialog.showDialog(requireContext());
+                    EpisodeListGlobalDefaultSortDialog dialog = EpisodeListGlobalDefaultSortDialog.newInstance();
+                    dialog.show(getChildFragmentManager(), "SortDialog");
                     return true;
                 }));
         findPreference(PREF_SWIPE)
@@ -106,6 +97,12 @@ public class UserInterfacePreferencesFragment extends AnimatedPreferenceFragment
         }
 
         findPreference(UserPreferences.PREF_BOTTOM_NAVIGATION).setOnPreferenceChangeListener((preference, newValue) -> {
+            if (newValue instanceof Boolean && !(Boolean) newValue) {
+                new MaterialAlertDialogBuilder(getContext())
+                        .setMessage(R.string.bottom_navigation_deprecation_warning)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show();
+            }
             if (newValue instanceof Boolean) {
                 backOpensDrawerToggle((Boolean) newValue);
             }

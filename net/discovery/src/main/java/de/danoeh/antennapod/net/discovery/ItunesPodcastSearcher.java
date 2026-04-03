@@ -1,10 +1,10 @@
 package de.danoeh.antennapod.net.discovery;
 
 import de.danoeh.antennapod.net.common.AntennapodHttpClient;
-import io.reactivex.Single;
-import io.reactivex.SingleOnSubscribe;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.core.SingleOnSubscribe;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -54,10 +54,14 @@ public class ItunesPodcastSearcher implements PodcastSearcher {
 
                     for (int i = 0; i < j.length(); i++) {
                         JSONObject podcastJson = j.getJSONObject(i);
-                        PodcastSearchResult podcast = PodcastSearchResult.fromItunes(podcastJson);
-                        if (podcast.feedUrl != null) {
-                            podcasts.add(podcast);
+                        if (!podcastJson.has("feedUrl")) {
+                            continue;
                         }
+                        String title = podcastJson.optString("collectionName", "Unknown");
+                        String imageUrl = podcastJson.optString("artworkUrl100", "");
+                        String feedUrl = podcastJson.optString("feedUrl", "");
+                        String author = podcastJson.optString("artistName", "Unknown");
+                        podcasts.add(new PodcastSearchResult(title, imageUrl, feedUrl, author));
                     }
                 } else {
                     subscriber.onError(new IOException(response.toString()));

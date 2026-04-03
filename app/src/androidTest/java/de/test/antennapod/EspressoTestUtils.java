@@ -11,8 +11,6 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.espresso.PerformException;
 import androidx.test.espresso.UiController;
 import androidx.test.espresso.ViewAction;
-import androidx.test.espresso.ViewInteraction;
-import androidx.test.espresso.contrib.DrawerActions;
 import androidx.test.espresso.contrib.RecyclerViewActions;
 import androidx.test.espresso.util.HumanReadables;
 import androidx.test.espresso.util.TreeIterables;
@@ -39,6 +37,7 @@ import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.hasDescendant;
+import static androidx.test.espresso.matcher.ViewMatchers.isDescendantOfA;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.isRoot;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
@@ -99,9 +98,8 @@ public class EspressoTestUtils {
      *
      * @param viewMatcher The view to wait for.
      * @param timeoutMillis Maximum waiting period in milliseconds.
-     * @throws Exception Throws an Exception in case of a timeout.
      */
-    public static void waitForViewGlobally(@NonNull Matcher<View> viewMatcher, long timeoutMillis) throws Exception {
+    public static void waitForViewGlobally(@NonNull Matcher<View> viewMatcher, long timeoutMillis) {
         long startTime = System.currentTimeMillis();
         long endTime = startTime + timeoutMillis;
 
@@ -110,14 +108,21 @@ public class EspressoTestUtils {
                 onView(viewMatcher).check(matches(isDisplayed()));
                 // no Exception thrown -> check successful
                 return;
-            } catch (NoMatchingViewException | AssertionFailedError ignore) {
+            } catch (NoMatchingViewException | AssertionFailedError exception) {
                 // check was not successful "not found" -> continue waiting
+                if (System.currentTimeMillis() >= endTime) {
+                    throw exception;
+                }
             }
-            //noinspection BusyWait
-            Thread.sleep(50);
-        } while (System.currentTimeMillis() < endTime);
+            try {
+                //noinspection BusyWait
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                break;
+            }
+        } while (true);
 
-        throw new Exception("Timeout after " + timeoutMillis + " ms");
+        throw new RuntimeException("Timeout after " + timeoutMillis + " ms");
     }
 
     /**
@@ -180,7 +185,7 @@ public class EspressoTestUtils {
 
         PreferenceManager.getDefaultSharedPreferences(InstrumentationRegistry.getInstrumentation().getTargetContext())
                 .edit()
-                .putString(UserPreferences.PREF_UPDATE_INTERVAL, "0")
+                .putString(UserPreferences.PREF_UPDATE_INTERVAL_MINUTES, "0")
                 .commit();
     }
 
@@ -212,13 +217,15 @@ public class EspressoTestUtils {
                         click()));
     }
 
-    public static void openNavDrawer() {
-        onView(isRoot()).perform(waitForView(withId(R.id.drawer_layout), 1000));
-        onView(withId(R.id.drawer_layout)).perform(DrawerActions.open());
+    public static void clickBottomNavItem(@StringRes int text) {
+        onView(allOf(withText(text),
+                isDescendantOfA(withId(R.id.bottomNavigationView)), isDisplayed())).perform(click());
     }
 
-    public static ViewInteraction onDrawerItem(Matcher<View> viewMatcher) {
-        return onView(allOf(viewMatcher, withId(R.id.txtvTitle)));
+    public static void clickBottomNavOverflow(@StringRes int text) {
+        onView(allOf(withText(R.string.overflow_more),
+                isDescendantOfA(withId(R.id.bottomNavigationView)), isDisplayed())).perform(click());
+        onView(allOf(withText(text), isDisplayed())).perform(click());
     }
 
     public static void tryKillPlaybackService() {

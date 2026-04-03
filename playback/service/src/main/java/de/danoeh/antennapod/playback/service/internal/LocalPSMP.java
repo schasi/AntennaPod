@@ -14,6 +14,7 @@ import androidx.lifecycle.Observer;
 import androidx.media.AudioAttributesCompat;
 import androidx.media.AudioFocusRequestCompat;
 import androidx.media.AudioManagerCompat;
+import de.danoeh.antennapod.event.MessageEvent;
 import de.danoeh.antennapod.event.PlayerErrorEvent;
 import de.danoeh.antennapod.event.playback.BufferUpdateEvent;
 import de.danoeh.antennapod.event.playback.SpeedChangedEvent;
@@ -26,6 +27,7 @@ import de.danoeh.antennapod.playback.base.PlaybackServiceMediaPlayer;
 import de.danoeh.antennapod.playback.base.PlayerStatus;
 import de.danoeh.antennapod.playback.base.RewindAfterPauseUtils;
 import de.danoeh.antennapod.playback.service.PlaybackService;
+import de.danoeh.antennapod.playback.service.R;
 import de.danoeh.antennapod.storage.preferences.UserPreferences;
 import de.danoeh.antennapod.ui.episodes.PlaybackSpeedUtils;
 import org.greenrobot.eventbus.EventBus;
@@ -678,8 +680,10 @@ public class LocalPSMP extends PlaybackServiceMediaPlayer {
 
     @Override
     protected void endPlayback(final boolean hasEnded, final boolean wasSkipped,
-                                    final boolean shouldContinue, final boolean toStoppedState) {
+                                    boolean shouldContinue, final boolean toStoppedState) {
         releaseWifiLockIfNecessary();
+
+        callback.episodeFinishedPlayback(); // notify that the current episode just finished
 
         boolean isPlaying = playerStatus == PlayerStatus.PLAYING;
 
@@ -700,6 +704,9 @@ public class LocalPSMP extends PlaybackServiceMediaPlayer {
         final Playable currentMedia = media;
         Playable nextMedia = null;
 
+        // we should continue to next episode if we were told to continue and we're allowed to (by sleep timer)
+        shouldContinue &= callback.shouldContinueToNextEpisode();
+
         if (shouldContinue) {
             // Load next episode if previous episode was in the queue and if there
             // is an episode in the queue left.
@@ -711,6 +718,8 @@ public class LocalPSMP extends PlaybackServiceMediaPlayer {
                 // we're taking care of post-playback processing
                 media = null;
                 playMediaObject(nextMedia, false, !nextMedia.localFileAvailable(), isPlaying, isPlaying);
+            } else if (wasSkipped) {
+                EventBus.getDefault().post(new MessageEvent(context.getString(R.string.no_following_in_queue)));
             }
         }
         if (shouldContinue || toStoppedState) {

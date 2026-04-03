@@ -1,6 +1,9 @@
 package de.test.antennapod.ui;
 
 import android.content.Intent;
+import android.os.Build;
+import android.view.View;
+import androidx.test.espresso.ViewInteraction;
 import androidx.test.espresso.contrib.DrawerActions;
 import androidx.test.espresso.intent.rule.IntentsTestRule;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -11,6 +14,7 @@ import de.danoeh.antennapod.model.feed.Feed;
 import de.danoeh.antennapod.storage.preferences.UserPreferences;
 import de.danoeh.antennapod.ui.screen.preferences.PreferenceActivity;
 import de.test.antennapod.EspressoTestUtils;
+import org.hamcrest.Matcher;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -30,9 +34,9 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.isRoot;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
-import static de.test.antennapod.EspressoTestUtils.onDrawerItem;
 import static de.test.antennapod.EspressoTestUtils.waitForView;
 import static org.hamcrest.Matchers.allOf;
+import static org.junit.Assume.assumeTrue;
 
 /**
  * User interface tests for MainActivity drawer.
@@ -63,6 +67,10 @@ public class NavigationDrawerTest {
     private void openNavDrawer() {
         onView(isRoot()).perform(waitForView(withId(R.id.drawer_layout), 1000));
         onView(withId(R.id.drawer_layout)).perform(DrawerActions.open());
+    }
+
+    private ViewInteraction onDrawerItem(Matcher<View> viewMatcher) {
+        return onView(allOf(viewMatcher, withId(R.id.txtvTitle)));
     }
 
     @Test
@@ -132,6 +140,7 @@ public class NavigationDrawerTest {
 
     @Test
     public void testGoToPreferences() {
+        assumeTrue(Build.VERSION.SDK_INT >= 30); // Unclear why this crashes on old Android versions
         activityRule.launchActivity(new Intent());
         openNavDrawer();
         onView(withText(R.string.settings_label)).perform(click());

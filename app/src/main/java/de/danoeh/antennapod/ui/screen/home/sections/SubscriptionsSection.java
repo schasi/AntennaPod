@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.activity.MainActivity;
+import de.danoeh.antennapod.ui.screen.subscriptions.FeedMenuHandler;
 import de.danoeh.antennapod.ui.screen.subscriptions.HorizontalFeedListAdapter;
 import de.danoeh.antennapod.ui.MenuItemUtils;
 import de.danoeh.antennapod.storage.database.DBReader;
@@ -22,10 +23,10 @@ import de.danoeh.antennapod.ui.screen.subscriptions.SubscriptionFragment;
 import de.danoeh.antennapod.model.feed.Feed;
 import de.danoeh.antennapod.ui.screen.home.HomeSection;
 import de.danoeh.antennapod.ui.statistics.StatisticsFragment;
-import io.reactivex.Observable;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
@@ -52,6 +53,7 @@ public class SubscriptionsSection extends HomeSection {
                                             ContextMenu.ContextMenuInfo contextMenuInfo) {
                 super.onCreateContextMenu(contextMenu, view, contextMenuInfo);
                 MenuItemUtils.setOnClickListeners(contextMenu, SubscriptionsSection.this::onContextItemSelected);
+                FeedMenuHandler.onPrepareMenu(contextMenu, Collections.singletonList(getLongPressedItem()));
             }
         };
         listAdapter.setDummyViews(NUM_FEEDS);
@@ -103,7 +105,10 @@ public class SubscriptionsSection extends HomeSection {
                     Collections.sort(statisticsData, (item1, item2) ->
                             Long.compare(item2.timePlayed, item1.timePlayed));
                     List<Feed> feeds = new ArrayList<>();
-                    for (int i = 0; i < statisticsData.size() && i < NUM_FEEDS; i++) {
+                    for (int i = 0; i < statisticsData.size() && feeds.size() < NUM_FEEDS; i++) {
+                        if (statisticsData.get(i).feed.getState() != Feed.STATE_SUBSCRIBED) {
+                            continue;
+                        }
                         feeds.add(statisticsData.get(i).feed);
                     }
                     listAdapter.setDummyViews(0);

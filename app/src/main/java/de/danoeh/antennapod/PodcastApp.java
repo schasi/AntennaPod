@@ -1,7 +1,6 @@
 package de.danoeh.antennapod;
 
 import android.app.Application;
-import android.os.StrictMode;
 import android.util.Log;
 
 import com.google.android.material.color.DynamicColors;
@@ -16,19 +15,8 @@ public class PodcastApp extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        Thread.setDefaultUncaughtExceptionHandler(new CrashReportWriter());
+        Thread.setDefaultUncaughtExceptionHandler(new CrashReportExceptionHandler());
         RxJavaErrorHandlerSetup.setupRxJavaErrorHandler();
-
-        if (BuildConfig.DEBUG) {
-            StrictMode.VmPolicy.Builder builder = new StrictMode.VmPolicy.Builder()
-                    .detectLeakedSqlLiteObjects()
-                    .penaltyLog()
-                    .penaltyDropBox()
-                    .detectActivityLeaks()
-                    .detectLeakedClosableObjects()
-                    .detectLeakedRegistrationObjects();
-            StrictMode.setVmPolicy(builder.build());
-        }
 
         try {
             // Robolectric calls onCreate for every test, which causes problems with static members

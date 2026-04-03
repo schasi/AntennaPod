@@ -9,11 +9,11 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.ListFragment;
 
 import de.danoeh.antennapod.ui.common.IntentUtils;
-import io.reactivex.Single;
-import io.reactivex.SingleOnSubscribe;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.core.SingleOnSubscribe;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -31,14 +31,17 @@ public class SpecialThanksFragment extends ListFragment {
 
         translatorsLoader = Single.create((SingleOnSubscribe<ArrayList<SpecialMemberItem>>) emitter -> {
             specialMembers.clear();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(
-                    getContext().getAssets().open("special_thanks.csv"), "UTF-8"));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String[] info = line.split(";");
-                specialMembers.add(new SpecialMemberItem(info[0], info[1], info[2], info[3]));
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                    getContext().getAssets().open("special_thanks.csv"), "UTF-8"))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] info = line.split(";");
+                    specialMembers.add(new SpecialMemberItem(info[0], info[1], info[2], info[3]));
+                }
+                emitter.onSuccess(specialMembers);
+            } catch (Exception e) {
+                emitter.onError(e);
             }
-            emitter.onSuccess(specialMembers);
         })
         .subscribeOn(Schedulers.io())
         .observeOn(AndroidSchedulers.mainThread())

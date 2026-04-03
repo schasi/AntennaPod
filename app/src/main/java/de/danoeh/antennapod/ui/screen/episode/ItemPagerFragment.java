@@ -26,10 +26,10 @@ import de.danoeh.antennapod.event.FeedItemEvent;
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.storage.database.DBReader;
 import de.danoeh.antennapod.ui.episodeslist.FeedItemMenuHandler;
-import io.reactivex.Observable;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 
 import java.util.Collections;
 import java.util.List;
@@ -113,7 +113,9 @@ public class ItemPagerFragment extends Fragment implements MaterialToolbar.OnMen
     @Override
     public void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putInt(KEY_PAGER_ID, pager.getId());
+        if (pager != null) {
+            outState.putInt(KEY_PAGER_ID, pager.getId());
+        }
     }
 
     @Override
@@ -181,10 +183,10 @@ public class ItemPagerFragment extends Fragment implements MaterialToolbar.OnMen
         if (item == null) {
             return;
         }
-        if (item.getFeed().getState() == Feed.STATE_SUBSCRIBED) {
-            new MainActivityStarter(getContext()).withOpenFeed(item.getFeedId()).withClearTop().start();
-        } else {
+        if (item.getFeed().getState() == Feed.STATE_NOT_SUBSCRIBED) {
             startActivity(new OnlineFeedviewActivityStarter(getContext(), item.getFeed().getDownloadUrl()).getIntent());
+        } else {
+            new MainActivityStarter(getContext()).withOpenFeed(item.getFeedId()).withClearTop().start();
         }
     }
 

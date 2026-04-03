@@ -50,9 +50,9 @@ import de.danoeh.antennapod.playback.service.R;
 import de.danoeh.antennapod.net.common.HttpCredentialEncoder;
 import de.danoeh.antennapod.net.common.NetworkUtils;
 import de.danoeh.antennapod.model.playback.Playable;
-import io.reactivex.Observable;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.Disposable;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.disposables.Disposable;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -402,20 +402,20 @@ public class ExoPlayerWrapper {
             return;
         }
 
-        LoudnessEnhancer newEnhancer = new LoudnessEnhancer(audioStreamId);
         LoudnessEnhancer oldEnhancer = this.loudnessEnhancer;
-        if (oldEnhancer != null) {
-            try {
+        try {
+            LoudnessEnhancer newEnhancer = new LoudnessEnhancer(audioStreamId);
+            if (oldEnhancer != null) {
                 newEnhancer.setEnabled(oldEnhancer.getEnabled());
                 if (oldEnhancer.getEnabled()) {
                     newEnhancer.setTargetGain((int) oldEnhancer.getTargetGain());
                 }
                 oldEnhancer.release();
-            } catch (Exception e) {
-                Log.d(TAG, e.toString());
             }
+            this.loudnessEnhancer = newEnhancer;
+        } catch (Exception e) {
+            Log.d(TAG, e.toString());
+            this.loudnessEnhancer = null;
         }
-
-        this.loudnessEnhancer = newEnhancer;
     }
 }

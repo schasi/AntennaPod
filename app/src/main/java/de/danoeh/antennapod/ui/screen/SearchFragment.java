@@ -1,7 +1,6 @@
 package de.danoeh.antennapod.ui.screen;
 
 
-import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -11,7 +10,6 @@ import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.inputmethod.InputMethodManager;
 import android.widget.ProgressBar;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -26,6 +24,7 @@ import com.google.android.material.chip.Chip;
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.activity.MainActivity;
 import de.danoeh.antennapod.event.MessageEvent;
+import de.danoeh.antennapod.ui.common.Keyboard;
 import de.danoeh.antennapod.ui.episodeslist.EpisodeItemListAdapter;
 import de.danoeh.antennapod.ui.screen.subscriptions.HorizontalFeedListAdapter;
 import de.danoeh.antennapod.ui.MenuItemUtils;
@@ -47,10 +46,10 @@ import de.danoeh.antennapod.ui.episodeslist.EpisodeItemListRecyclerView;
 import de.danoeh.antennapod.ui.view.FloatingSelectMenu;
 import de.danoeh.antennapod.ui.view.LiftOnScrollListener;
 import de.danoeh.antennapod.ui.episodeslist.EpisodeItemViewHolder;
-import io.reactivex.Observable;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -69,6 +68,7 @@ public class SearchFragment extends Fragment implements EpisodeItemListAdapter.O
     private static final String ARG_QUERY = "query";
     private static final String ARG_FEED = "feed";
     private static final String ARG_FEED_NAME = "feedName";
+    private static final String ARG_ARCHIVED = "archived";
     private static final int SEARCH_DEBOUNCE_INTERVAL = 1500;
 
     private EpisodeItemListAdapter adapter;
@@ -114,6 +114,12 @@ public class SearchFragment extends Fragment implements EpisodeItemListAdapter.O
         SearchFragment fragment = newInstance();
         fragment.getArguments().putLong(ARG_FEED, feed);
         fragment.getArguments().putString(ARG_FEED_NAME, feedTitle);
+        return fragment;
+    }
+
+    public static SearchFragment newInstanceArchive() {
+        SearchFragment fragment = newInstance();
+        fragment.getArguments().putBoolean(ARG_ARCHIVED, true);
         return fragment;
     }
 
@@ -198,16 +204,16 @@ public class SearchFragment extends Fragment implements EpisodeItemListAdapter.O
         chip = layout.findViewById(R.id.feed_title_chip);
         chip.setOnCloseIconClickListener(v -> {
             getArguments().putLong(ARG_FEED, 0);
+            getArguments().putBoolean(ARG_ARCHIVED, false);
             searchWithProgressBar();
         });
-        chip.setVisibility((getArguments().getLong(ARG_FEED, 0) == 0) ? View.GONE : View.VISIBLE);
-        chip.setText(getArguments().getString(ARG_FEED_NAME, ""));
+        updateChipVisibility();
         if (getArguments().getString(ARG_QUERY, null) != null) {
             search();
         }
         searchView.setOnQueryTextFocusChangeListener((view, hasFocus) -> {
             if (hasFocus && !isOtherViewInFoucus) {
-                showInputMethod(view.findFocus());
+                Keyboard.show(getContext(), view.findFocus());
             }
         });
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -215,9 +221,7 @@ public class SearchFragment extends Fragment implements EpisodeItemListAdapter.O
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 super.onScrollStateChanged(recyclerView, newState);
                 if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
-                    InputMethodManager imm = (InputMethodManager)
-                            getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
-                    imm.hideSoftInputFromWindow(recyclerView.getWindowToken(), 0);
+                    Keyboard.hide(getActivity());
                 }
             }
         });
@@ -295,7 +299,7 @@ public class SearchFragment extends Fragment implements EpisodeItemListAdapter.O
     public boolean onContextItemSelected(@NonNull MenuItem item) {
         Feed selectedFeedItem  = adapterFeeds.getLongPressedItem();
         if (selectedFeedItem != null
-                && FeedMenuHandler.onMenuItemClicked(this, item.getItemId(), selectedFeedItem, () -> { })) {
+                && FeedMenuHandler.onMenuItemClicked(this, item.getItemId(), selectedFeedItem)) {
             return true;
         }
         FeedItem selectedItem = adapter.getLongPressedItem();
@@ -358,7 +362,7 @@ public class SearchFragment extends Fragment implements EpisodeItemListAdapter.O
         if (adapter != null) {
             for (int i = 0; i < adapter.getItemCount(); i++) {
                 EpisodeItemViewHolder holder = (EpisodeItemViewHolder) recyclerView.findViewHolderForAdapterPosition(i);
-                if (holder != null && holder.isCurrentlyPlayingItem()) {
+                if (holder != null && holder.isPlayingItem()) {
                     holder.notifyPlaybackPositionUpdated(event);
                     break;
                 }
@@ -377,6 +381,17 @@ public class SearchFragment extends Fragment implements EpisodeItemListAdapter.O
         search();
     }
 
+    private void updateChipVisibility() {
+        chip.setVisibility(View.GONE);
+        if (getArguments().getBoolean(ARG_ARCHIVED, false)) {
+            chip.setVisibility(View.VISIBLE);
+            chip.setText(R.string.archive_feed_label_noun);
+        } else if (getArguments().getLong(ARG_FEED, 0) != 0) {
+            chip.setVisibility(View.VISIBLE);
+            chip.setText(getArguments().getString(ARG_FEED_NAME, ""));
+        }
+    }
+
     private void search() {
         if (disposableFeeds != null) {
             disposableFeeds.dispose();
@@ -386,7 +401,7 @@ public class SearchFragment extends Fragment implements EpisodeItemListAdapter.O
         }
         long feed = getArguments().getLong(ARG_FEED, 0);
         boolean isSearchingFeed = feed != 0;
-        chip.setVisibility(isSearchingFeed ? View.VISIBLE : View.GONE);
+        updateChipVisibility();
         adapterFeeds.setEndButton(R.string.search_online, isSearchingFeed ? null : this::searchOnline);
 
         String query = searchView.getQuery().toString();
@@ -394,11 +409,12 @@ public class SearchFragment extends Fragment implements EpisodeItemListAdapter.O
             emptyViewHandler.setTitle(R.string.type_to_search);
             return;
         }
+        final int state = getArguments().getBoolean(ARG_ARCHIVED, false) ? Feed.STATE_ARCHIVED : Feed.STATE_SUBSCRIBED;
         if (feed != 0) {
             // Search within a feed
             adapterFeeds.updateData(Collections.emptyList());
         } else {
-            disposableFeeds = Observable.fromCallable(() -> DBReader.searchFeeds(query))
+            disposableFeeds = Observable.fromCallable(() -> DBReader.searchFeeds(query, state))
                     .subscribeOn(Schedulers.io())
                     .observeOn(AndroidSchedulers.mainThread())
                     .subscribe(results -> {
@@ -407,7 +423,7 @@ public class SearchFragment extends Fragment implements EpisodeItemListAdapter.O
                         emptyViewHandler.setTitle(getString(R.string.no_results_for_query, query));
                     }, error -> Log.e(TAG, Log.getStackTraceString(error)));
         }
-        disposableEpisodes = Observable.fromCallable(() -> DBReader.searchFeedItems(feed, query))
+        disposableEpisodes = Observable.fromCallable(() -> DBReader.searchFeedItems(feed, query, state))
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(results -> {
@@ -418,20 +434,12 @@ public class SearchFragment extends Fragment implements EpisodeItemListAdapter.O
                 }, error -> Log.e(TAG, Log.getStackTraceString(error)));
     }
 
-    private void showInputMethod(View view) {
-        InputMethodManager imm = (InputMethodManager) getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (imm != null) {
-            imm.showSoftInput(view, 0);
-        }
-    }
-
     private void searchOnline() {
         if (adapter != null && adapter.inActionMode()) {
             adapter.endSelectMode();
         }
         searchView.clearFocus();
-        InputMethodManager in = (InputMethodManager) getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
-        in.hideSoftInputFromWindow(searchView.getWindowToken(), 0);
+        Keyboard.hide(getActivity());
         String query = searchView.getQuery().toString();
         if (query.matches("http[s]?://.*")) {
             startActivity(new OnlineFeedviewActivityStarter(getContext(), query).getIntent());

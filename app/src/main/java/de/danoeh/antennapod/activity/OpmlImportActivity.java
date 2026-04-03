@@ -4,7 +4,6 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.text.Spannable;
 import android.text.SpannableString;
@@ -33,10 +32,10 @@ import de.danoeh.antennapod.model.feed.Feed;
 import de.danoeh.antennapod.storage.importexport.OpmlElement;
 import de.danoeh.antennapod.storage.importexport.OpmlReader;
 import de.danoeh.antennapod.ui.common.ToolbarActivity;
-import io.reactivex.Completable;
-import io.reactivex.Observable;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.apache.commons.io.ByteOrderMark;
 import org.apache.commons.io.input.BOMInputStream;
 
@@ -238,8 +237,7 @@ public class OpmlImportActivity extends ToolbarActivity {
                         }, e -> {
                             Log.d(TAG, Log.getStackTraceString(e));
                             String message = e.getMessage() == null ? "" : e.getMessage();
-                            if (message.toLowerCase(Locale.ROOT).contains("permission")
-                                    && Build.VERSION.SDK_INT >= 23) {
+                            if (message.toLowerCase(Locale.ROOT).contains("permission")) {
                                 int permission = ActivityCompat.checkSelfPermission(this,
                                         android.Manifest.permission.READ_EXTERNAL_STORAGE);
                                 if (permission != PackageManager.PERMISSION_GRANTED) {

@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
@@ -13,16 +14,21 @@ import android.view.ViewGroup;
 import androidx.fragment.app.Fragment;
 
 import de.danoeh.antennapod.R;
+import de.danoeh.antennapod.event.PlayerStatusEvent;
 import de.danoeh.antennapod.playback.service.PlaybackController;
 import de.danoeh.antennapod.storage.database.DBReader;
+import de.danoeh.antennapod.storage.preferences.PlaybackPreferences;
 import de.danoeh.antennapod.ui.cleaner.ShownotesCleaner;
 import de.danoeh.antennapod.model.feed.FeedMedia;
 import de.danoeh.antennapod.model.playback.Playable;
 import de.danoeh.antennapod.ui.view.ShownotesWebView;
-import io.reactivex.Maybe;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Maybe;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
+import org.greenrobot.eventbus.ThreadMode;
 
 /**
  * Displays the description of a Playable object in a Webview.
@@ -36,18 +42,16 @@ public class ItemDescriptionFragment extends Fragment {
 
     private ShownotesWebView webvDescription;
     private Disposable webViewLoader;
-    private PlaybackController controller;
+    private String loadedData = "";
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         Log.d(TAG, "Creating view");
         View root = inflater.inflate(R.layout.item_description_fragment, container, false);
         webvDescription = root.findViewById(R.id.webview);
-        webvDescription.setTimecodeSelectedListener(time -> {
-            if (controller != null) {
-                controller.seekTo(time);
-            }
-        });
+        webvDescription.setTimecodeSelectedListener(time ->
+                PlaybackController.bindToService(getActivity(), playbackService ->
+                        playbackService.seekTo(time)));
         webvDescription.setPageFinishedListener(() -> {
             // Restoring the scroll position might not always work
             webvDescription.postDelayed(ItemDescriptionFragment.this::restoreFromPreference, 50);
@@ -92,7 +96,7 @@ public class ItemDescriptionFragment extends Fragment {
             return;
         }
         webViewLoader = Maybe.<String>create(emitter -> {
-            Playable media = controller.getMedia();
+            Playable media = DBReader.getFeedMedia(PlaybackPreferences.getCurrentlyPlayingFeedMediaId());
             if (media == null) {
                 emitter.onComplete();
                 return;
@@ -111,6 +115,10 @@ public class ItemDescriptionFragment extends Fragment {
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(data -> {
+                    if (TextUtils.equals(loadedData, data)) {
+                        return;
+                    }
+                    loadedData = data;
                     webvDescription.loadDataWithBaseURL("https://127.0.0.1", data, "text/html",
                             "utf-8", "about:blank");
                     Log.d(TAG, "Webview loaded");
@@ -127,35 +135,32 @@ public class ItemDescriptionFragment extends Fragment {
         Log.d(TAG, "Saving preferences");
         SharedPreferences prefs = getActivity().getSharedPreferences(PREF, Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = prefs.edit();
-        if (controller != null && controller.getMedia() != null && webvDescription != null) {
+        if (webvDescription != null) {
             Log.d(TAG, "Saving scroll position: " + webvDescription.getScrollY());
             editor.putInt(PREF_SCROLL_Y, webvDescription.getScrollY());
-            editor.putString(PREF_PLAYABLE_ID, controller.getMedia().getIdentifier()
-                    .toString());
+            editor.putString(PREF_PLAYABLE_ID, "" + PlaybackPreferences.getCurrentlyPlayingFeedMediaId());
         } else {
-            Log.d(TAG, "savePreferences was called while media or webview was null");
+            Log.d(TAG, "savePreferences was called while webview was null");
             editor.putInt(PREF_SCROLL_Y, -1);
             editor.putString(PREF_PLAYABLE_ID, "");
         }
         editor.apply();
     }
 
-    private boolean restoreFromPreference() {
+    private void restoreFromPreference() {
         Log.d(TAG, "Restoring from preferences");
         Activity activity = getActivity();
         if (activity != null) {
             SharedPreferences prefs = activity.getSharedPreferences(PREF, Activity.MODE_PRIVATE);
             String id = prefs.getString(PREF_PLAYABLE_ID, "");
             int scrollY = prefs.getInt(PREF_SCROLL_Y, -1);
-            if (controller != null && scrollY != -1 && controller.getMedia() != null
-                    && id.equals(controller.getMedia().getIdentifier().toString())
+            if (scrollY != -1
+                    && id.equals("" + PlaybackPreferences.getCurrentlyPlayingFeedMediaId())
                     && webvDescription != null) {
                 Log.d(TAG, "Restored scroll Position: " + scrollY);
                 webvDescription.scrollTo(webvDescription.getScrollX(), scrollY);
-                return true;
             }
         }
-        return false;
     }
 
     public void scrollToTop() {
@@ -166,13 +171,7 @@ public class ItemDescriptionFragment extends Fragment {
     @Override
     public void onStart() {
         super.onStart();
-        controller = new PlaybackController(getActivity()) {
-            @Override
-            public void loadMediaInfo() {
-                load();
-            }
-        };
-        controller.init();
+        EventBus.getDefault().register(this);
         load();
     }
 
@@ -183,7 +182,11 @@ public class ItemDescriptionFragment extends Fragment {
         if (webViewLoader != null) {
             webViewLoader.dispose();
         }
-        controller.release();
-        controller = null;
+        EventBus.getDefault().unregister(this);
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onPlayerStatusEvent(PlayerStatusEvent event) {
+        load();
     }
 }

@@ -11,6 +11,7 @@ import androidx.appcompat.view.menu.MenuBuilder;
 import androidx.appcompat.widget.ListPopupWindow;
 import com.google.android.material.badge.BadgeDrawable;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.internal.ViewUtils;
 import com.google.android.material.navigation.NavigationBarView;
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.event.FeedListUpdateEvent;
@@ -18,10 +19,10 @@ import de.danoeh.antennapod.event.UnreadItemsUpdateEvent;
 import de.danoeh.antennapod.model.feed.FeedItemFilter;
 import de.danoeh.antennapod.storage.database.DBReader;
 import de.danoeh.antennapod.storage.preferences.UserPreferences;
-import io.reactivex.Observable;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -40,6 +41,7 @@ public class BottomNavigation {
     public BottomNavigation(BottomNavigationView bottomNavigationView) {
         this.bottomNavigationView = bottomNavigationView;
         this.context = bottomNavigationView.getContext();
+        ViewUtils.doOnApplyWindowInsets(bottomNavigationView, (view, insets, initialPadding) -> insets);
     }
 
     public void buildMenu() {
@@ -148,15 +150,12 @@ public class BottomNavigation {
         bottomNavigationView.setVisibility(View.GONE);
     }
 
-    public void onStart() {
+    public void onCreateView() {
         EventBus.getDefault().register(this);
     }
 
-    public void onStop() {
+    public void onDestroyView() {
         EventBus.getDefault().unregister(this);
-    }
-
-    public void onDestroy() {
         if (bottomNavigationBadgeLoader != null) {
             bottomNavigationBadgeLoader.dispose();
             bottomNavigationBadgeLoader = null;

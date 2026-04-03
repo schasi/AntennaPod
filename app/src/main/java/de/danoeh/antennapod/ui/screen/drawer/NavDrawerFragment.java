@@ -44,8 +44,10 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import de.danoeh.antennapod.R;
@@ -65,10 +67,10 @@ import de.danoeh.antennapod.storage.preferences.UserPreferences;
 import de.danoeh.antennapod.ui.appstartintent.MainActivityStarter;
 import de.danoeh.antennapod.ui.common.ThemeUtils;
 import de.danoeh.antennapod.ui.screen.home.HomeFragment;
-import io.reactivex.Observable;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 
 public class NavDrawerFragment extends Fragment implements SharedPreferences.OnSharedPreferenceChangeListener {
     @VisibleForTesting
@@ -80,8 +82,8 @@ public class NavDrawerFragment extends Fragment implements SharedPreferences.OnS
 
     private NavDrawerData navDrawerData;
     private int reclaimableSpace = 0;
-    private List<NavDrawerData.DrawerItem> flatItemList;
-    private NavDrawerData.DrawerItem contextPressedItem = null;
+    private List<DrawerItem> flatItemList;
+    private DrawerItem contextPressedItem = null;
     private NavListAdapter navAdapter;
     private Disposable disposable;
     private ProgressBar progressBar;
@@ -162,11 +164,15 @@ public class NavDrawerFragment extends Fragment implements SharedPreferences.OnS
     public void onCreateContextMenu(@NonNull ContextMenu menu, @NonNull View v, ContextMenu.ContextMenuInfo menuInfo) {
         super.onCreateContextMenu(menu, v, menuInfo);
         MenuInflater inflater = getActivity().getMenuInflater();
-        menu.setHeaderTitle(contextPressedItem.getTitle());
-        if (contextPressedItem.type == NavDrawerData.DrawerItem.Type.FEED) {
+        if (contextPressedItem.isFeed()) {
+            menu.setHeaderTitle(contextPressedItem.asFeed().getTitle());
             inflater.inflate(R.menu.nav_feed_context, menu);
             // episodes are not loaded, so we cannot check if the podcast has new or unplayed ones!
+            FeedMenuHandler.onPrepareMenu(menu, Collections.singletonList(contextPressedItem.asFeed()));
+        } else if (FeedPreferences.TAG_UNTAGGED.equals(contextPressedItem.asTag().getTitle())) {
+            return;
         } else {
+            menu.setHeaderTitle(contextPressedItem.asTag().getTitle());
             inflater.inflate(R.menu.nav_folder_context, menu);
         }
         MenuItemUtils.setOnClickListeners(menu, this::onContextItemSelected);
@@ -174,37 +180,51 @@ public class NavDrawerFragment extends Fragment implements SharedPreferences.OnS
 
     @Override
     public boolean onContextItemSelected(@NonNull MenuItem item) {
-        NavDrawerData.DrawerItem pressedItem = contextPressedItem;
+        DrawerItem pressedItem = contextPressedItem;
         contextPressedItem = null;
         if (pressedItem == null) {
             return false;
         }
-        if (pressedItem.type == NavDrawerData.DrawerItem.Type.FEED) {
-            return onFeedContextMenuClicked(((NavDrawerData.FeedDrawerItem) pressedItem).feed, item);
+        if (pressedItem.isFeed()) {
+            return onFeedContextMenuClicked(pressedItem.asFeed(), item);
         } else {
-            return onTagContextMenuClicked(pressedItem, item);
+            return onTagContextMenuClicked(pressedItem.asTag(), item);
         }
     }
 
     private boolean onFeedContextMenuClicked(Feed feed, MenuItem item) {
         final int itemId = item.getItemId();
-        if (itemId == R.id.remove_feed) {
-            RemoveFeedDialog.show(getContext(), feed, () -> {
-                if (String.valueOf(feed.getId()).equals(getLastNavFragment(getContext()))) {
-                    ((MainActivity) getActivity()).loadFragment(UserPreferences.getDefaultPage(), null);
-                    // Make sure fragment is hidden before actually starting to delete
-                    getActivity().getSupportFragmentManager().executePendingTransactions();
-                }
-            });
+        if (itemId == R.id.remove_archive_feed || itemId == R.id.remove_restore_feed) {
+            new RemoveFeedDialogClose(Collections.singletonList(feed)).show(getParentFragmentManager(), null);
             return true;
         }
-        if (FeedMenuHandler.onMenuItemClicked(this, itemId, feed, null)) {
+        if (FeedMenuHandler.onMenuItemClicked(this, itemId, feed)) {
             return true;
         }
         return super.onContextItemSelected(item);
     }
 
-    private boolean onTagContextMenuClicked(NavDrawerData.DrawerItem drawerItem, MenuItem item) {
+    public static class RemoveFeedDialogClose extends RemoveFeedDialog {
+        public RemoveFeedDialogClose(@NonNull List<Feed> feeds) {
+            super(feeds);
+        }
+
+        public RemoveFeedDialogClose() {
+            super();
+        }
+
+        @Override
+        protected void onRemoveButtonPressed() {
+            if (String.valueOf(feeds.get(0).getId()).equals(getLastNavFragment(getContext()))) {
+                // Make sure fragment is hidden before actually starting to delete
+                ((MainActivity) getActivity()).loadFragment(UserPreferences.getDefaultPage(), null);
+                getActivity().getSupportFragmentManager().executePendingTransactions();
+            }
+            super.onRemoveButtonPressed();
+        }
+    }
+
+    private boolean onTagContextMenuClicked(NavDrawerData.TagItem drawerItem, MenuItem item) {
         final int itemId = item.getItemId();
         if (itemId == R.id.rename_folder_item) {
             new RenameFeedDialog(getActivity(), drawerItem).show();
@@ -216,10 +236,8 @@ public class NavDrawerFragment extends Fragment implements SharedPreferences.OnS
 
                 @Override
                 public void onConfirmButtonPressed(DialogInterface dialog) {
-                    List<NavDrawerData.DrawerItem> feeds = ((NavDrawerData.TagDrawerItem) drawerItem).getChildren();
-
-                    for (NavDrawerData.DrawerItem feed : feeds) {
-                        FeedPreferences preferences = ((NavDrawerData.FeedDrawerItem) feed).feed.getPreferences();
+                    for (Feed feed : drawerItem.getFeeds()) {
+                        FeedPreferences preferences = feed.getPreferences();
                         preferences.getTags().remove(drawerItem.getTitle());
                         DBWriter.setFeedPreferences(preferences);
                     }
@@ -272,7 +290,7 @@ public class NavDrawerFragment extends Fragment implements SharedPreferences.OnS
         }
 
         @Override
-        public NavDrawerData.DrawerItem getItem(int position) {
+        public DrawerItem getItem(int position) {
             if (flatItemList != null && 0 <= position && position < flatItemList.size()) {
                 return flatItemList.get(position);
             } else {
@@ -288,11 +306,11 @@ public class NavDrawerFragment extends Fragment implements SharedPreferences.OnS
             } else if (StringUtils.isNumeric(lastNavFragment)) { // last fragment was not a list, but a feed
                 long feedId = Long.parseLong(lastNavFragment);
                 if (navDrawerData != null) {
-                    NavDrawerData.DrawerItem itemToCheck = flatItemList.get(
+                    DrawerItem itemToCheck = flatItemList.get(
                             position - navAdapter.getSubscriptionOffset());
-                    if (itemToCheck.type == NavDrawerData.DrawerItem.Type.FEED) {
+                    if (itemToCheck.isFeed()) {
                         // When the same feed is displayed multiple times, it should be highlighted multiple times.
-                        return ((NavDrawerData.FeedDrawerItem) itemToCheck).feed.getId() == feedId;
+                        return itemToCheck.asFeed().getId() == feedId;
                     }
                 }
             }
@@ -341,15 +359,15 @@ public class NavDrawerFragment extends Fragment implements SharedPreferences.OnS
                     ((MainActivity) getActivity()).getBottomSheet().setState(BottomSheetBehavior.STATE_COLLAPSED);
                 } else {
                     int pos = position - navAdapter.getSubscriptionOffset();
-                    NavDrawerData.DrawerItem clickedItem = flatItemList.get(pos);
+                    DrawerItem clickedItem = flatItemList.get(pos);
 
-                    if (clickedItem.type == NavDrawerData.DrawerItem.Type.FEED) {
-                        long feedId = ((NavDrawerData.FeedDrawerItem) clickedItem).feed.getId();
+                    if (clickedItem.isFeed()) {
+                        long feedId = clickedItem.asFeed().getId();
                         ((MainActivity) getActivity()).loadFeedFragmentById(feedId, null);
                         ((MainActivity) getActivity()).getBottomSheet()
                                 .setState(BottomSheetBehavior.STATE_COLLAPSED);
                     } else {
-                        NavDrawerData.TagDrawerItem folder = ((NavDrawerData.TagDrawerItem) clickedItem);
+                        NavDrawerData.TagItem folder = clickedItem.asTag();
                         if (openFolders.contains(folder.getTitle())) {
                             openFolders.remove(folder.getTitle());
                         } else {
@@ -361,7 +379,8 @@ public class NavDrawerFragment extends Fragment implements SharedPreferences.OnS
                                 .putStringSet(PREF_OPEN_FOLDERS, openFolders)
                                 .apply();
 
-                        disposable = Observable.fromCallable(() -> makeFlatDrawerData(navDrawerData.items, 0))
+                        disposable = Observable.fromCallable(() -> makeFlatDrawerData(
+                                        navDrawerData.tags, navDrawerData.feedCounters))
                                 .subscribeOn(Schedulers.computation())
                                 .observeOn(AndroidSchedulers.mainThread())
                                 .subscribe(
@@ -407,9 +426,10 @@ public class NavDrawerFragment extends Fragment implements SharedPreferences.OnS
         disposable = Observable.fromCallable(
                 () -> {
                     NavDrawerData data = DBReader.getNavDrawerData(UserPreferences.getSubscriptionsFilter(),
-                            UserPreferences.getFeedOrder(), UserPreferences.getFeedCounterSetting());
+                            UserPreferences.getFeedOrder(), UserPreferences.getFeedCounterSetting(),
+                            Feed.STATE_SUBSCRIBED);
                     reclaimableSpace = EpisodeCleanupAlgorithmFactory.build().getReclaimableItems();
-                    return new Pair<>(data, makeFlatDrawerData(data.items, 0));
+                    return new Pair<>(data, makeFlatDrawerData(data.tags, data.feedCounters));
                 })
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
@@ -425,21 +445,42 @@ public class NavDrawerFragment extends Fragment implements SharedPreferences.OnS
                         });
     }
 
-    private List<NavDrawerData.DrawerItem> makeFlatDrawerData(List<NavDrawerData.DrawerItem> items, int layer) {
-        List<NavDrawerData.DrawerItem> flatItems = new ArrayList<>();
-        for (NavDrawerData.DrawerItem item : items) {
-            item.setLayer(layer);
-            flatItems.add(item);
-            if (item.type == NavDrawerData.DrawerItem.Type.TAG) {
-                NavDrawerData.TagDrawerItem folder = ((NavDrawerData.TagDrawerItem) item);
-                folder.setOpen(openFolders.contains(folder.getTitle()));
-                if (folder.isOpen()) {
-                    flatItems.addAll(makeFlatDrawerData(
-                            ((NavDrawerData.TagDrawerItem) item).getChildren(), layer + 1));
+    private List<DrawerItem> makeFlatDrawerData(List<NavDrawerData.TagItem> tags,
+                                                @Nullable java.util.Map<Long, Integer> feedCounters) {
+        List<DrawerItem> flatItems = new ArrayList<>();
+        for (NavDrawerData.TagItem tag : tags) {
+            if (FeedPreferences.TAG_ROOT.equals(tag.getTitle())) {
+                for (Feed feed : tag.getFeeds()) {
+                    flatItems.add(new DrawerItem(feed, feedCounter(feed, feedCounters), 0));
                 }
+                break;
             }
         }
+        for (NavDrawerData.TagItem tag : tags) {
+            if (FeedPreferences.TAG_ROOT.equals(tag.getTitle())
+                    || FeedPreferences.TAG_UNTAGGED.equals(tag.getTitle())) {
+                continue;
+            }
+            DrawerItem tagItem = new DrawerItem(tag);
+            flatItems.add(tagItem);
+            int counter = 0;
+            tag.setOpen(openFolders.contains(tag.getTitle()));
+            for (Feed feed : tag.getFeeds()) {
+                counter += feedCounter(feed, feedCounters);
+                if (tag.isOpen()) {
+                    flatItems.add(new DrawerItem(feed, feedCounter(feed, feedCounters), 1));
+                }
+            }
+            tagItem.setCounter(counter);
+        }
         return flatItems;
+    }
+
+    private int feedCounter(Feed feed, Map<Long, Integer> feedCounters) {
+        if (feedCounters == null) {
+            return 0;
+        }
+        return feedCounters.containsKey(feed.getId()) ? feedCounters.get(feed.getId()) : 0;
     }
 
     public static void saveLastNavFragment(Context context, String tag) {

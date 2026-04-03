@@ -13,6 +13,14 @@ import android.util.Pair;
 import android.view.SurfaceHolder;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
+import androidx.core.util.Consumer;
+import androidx.media3.session.MediaController;
+import androidx.media3.session.SessionToken;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
+import de.danoeh.antennapod.playback.base.BuildConfig;
+import de.danoeh.antennapod.playback.service.internal.PlayableUtils;
+import de.danoeh.antennapod.model.playback.TimerValue;
 import de.danoeh.antennapod.storage.database.DBReader;
 import de.danoeh.antennapod.storage.database.DBWriter;
 import de.danoeh.antennapod.event.playback.PlaybackPositionEvent;
@@ -32,6 +40,7 @@ import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Communicates with the playback service. GUI classes should use this class to
@@ -79,7 +88,7 @@ public abstract class PlaybackController {
     }
 
     private synchronized void initServiceRunning() {
-        if (initialized) {
+        if (initialized || BuildConfig.USE_MEDIA3_PLAYBACK_SERVICE) {
             return;
         }
         initialized = true;
@@ -147,6 +156,9 @@ public abstract class PlaybackController {
      * as the arguments of the launch intent.
      */
     private void bindToService() {
+        if (BuildConfig.USE_MEDIA3_PLAYBACK_SERVICE) {
+            return;
+        }
         Log.d(TAG, "Trying to connect to service");
         if (!PlaybackService.isRunning) {
             throw new IllegalStateException("Trying to bind but service is not running");
@@ -354,18 +366,18 @@ public abstract class PlaybackController {
         }
     }
 
-    public long getSleepTimerTimeLeft() {
+    public TimerValue getSleepTimerTimeLeft() {
         if (playbackService != null) {
             return playbackService.getSleepTimerTimeLeft();
         } else {
-            return Playable.INVALID_TIME;
+            return new TimerValue(Playable.INVALID_TIME, Playable.INVALID_TIME);
         }
     }
 
     public void extendSleepTimer(long extendTime) {
-        long timeLeft = getSleepTimerTimeLeft();
-        if (playbackService != null && timeLeft != Playable.INVALID_TIME) {
-            setSleepTimer(timeLeft + extendTime);
+        TimerValue timeLeft = getSleepTimerTimeLeft();
+        if (playbackService != null && timeLeft.getMillisValue() != Playable.INVALID_TIME) {
+            setSleepTimer(timeLeft.getDisplayValue() + extendTime);
         }
     }
 
@@ -376,13 +388,18 @@ public abstract class PlaybackController {
     }
 
     public void seekTo(int time) {
+        Playable playable = getMedia();
         if (playbackService != null) {
+            if (playable != null) {
+                long timestamp = playable.getLastPlayedTimeStatistics();
+                PlayableUtils.saveCurrentPosition(playable, time, timestamp);
+            }
             playbackService.seekTo(time);
-        } else if (getMedia() instanceof FeedMedia) {
-            FeedMedia media = (FeedMedia) getMedia();
+        } else if (playable instanceof FeedMedia) {
+            FeedMedia media = (FeedMedia) playable;
             media.setPosition(time);
             DBWriter.setFeedItem(media.getItem());
-            EventBus.getDefault().post(new PlaybackPositionEvent(time, getMedia().getDuration()));
+            EventBus.getDefault().post(new PlaybackPositionEvent(time, playable.getDuration()));
         }
     }
 
@@ -473,5 +490,45 @@ public abstract class PlaybackController {
 
     public boolean isStreaming() {
         return playbackService != null && playbackService.isStreaming();
+    }
+
+    public static void bindToService(Activity activity, Consumer<PlaybackService> consumer) {
+        if (!PlaybackService.isRunning) {
+            return;
+        }
+        activity.bindService(new Intent(activity, PlaybackService.class), new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName className, IBinder service) {
+                if (service instanceof PlaybackService.LocalBinder) {
+                    consumer.accept(((PlaybackService.LocalBinder) service).getService());
+                }
+                try {
+                    activity.unbindService(this);
+                } catch (IllegalArgumentException e) {
+                    // Ignore
+                }
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+            }
+        }, 0);
+    }
+
+    public static void bindToMedia3Service(Context context, Consumer<MediaController> consumer) {
+        SessionToken sessionToken = new SessionToken(context,
+                new ComponentName(context, Media3PlaybackService.class));
+        ListenableFuture<MediaController> controllerFuture =
+                new MediaController.Builder(context, sessionToken).buildAsync();
+        controllerFuture.addListener(() -> {
+            try {
+                MediaController controller = controllerFuture.get();
+                consumer.accept(controller);
+                controller.release();
+            } catch (ExecutionException | InterruptedException e) {
+                e.printStackTrace();
+            }
+        }, MoreExecutors.directExecutor());
+
     }
 }

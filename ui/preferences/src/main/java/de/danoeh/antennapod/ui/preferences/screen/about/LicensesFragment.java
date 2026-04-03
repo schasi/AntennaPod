@@ -12,11 +12,11 @@ import androidx.fragment.app.ListFragment;
 import com.google.android.material.transition.MaterialSharedAxis;
 import de.danoeh.antennapod.ui.common.IntentUtils;
 import de.danoeh.antennapod.ui.preferences.R;
-import io.reactivex.Single;
-import io.reactivex.SingleOnSubscribe;
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.core.SingleOnSubscribe;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.NodeList;
 
@@ -46,21 +46,24 @@ public class LicensesFragment extends ListFragment {
 
         licensesLoader = Single.create((SingleOnSubscribe<ArrayList<LicenseItem>>) emitter -> {
             licenses.clear();
-            InputStream stream = getContext().getAssets().open("licenses.xml");
-            DocumentBuilder docBuilder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
-            NodeList libraryList = docBuilder.parse(stream).getElementsByTagName("library");
-            for (int i = 0; i < libraryList.getLength(); i++) {
-                NamedNodeMap lib = libraryList.item(i).getAttributes();
-                licenses.add(new LicenseItem(
-                        lib.getNamedItem("name").getTextContent(),
-                        String.format("By %s, %s license",
-                                lib.getNamedItem("author").getTextContent(),
-                                lib.getNamedItem("license").getTextContent()),
-                        null,
-                        lib.getNamedItem("website").getTextContent(),
-                        lib.getNamedItem("licenseText").getTextContent()));
+            try (InputStream stream = getContext().getAssets().open("licenses.xml")) {
+                DocumentBuilder docBuilder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+                NodeList libraryList = docBuilder.parse(stream).getElementsByTagName("library");
+                for (int i = 0; i < libraryList.getLength(); i++) {
+                    NamedNodeMap lib = libraryList.item(i).getAttributes();
+                    licenses.add(new LicenseItem(
+                            lib.getNamedItem("name").getTextContent(),
+                            String.format("By %s, %s license",
+                                    lib.getNamedItem("author").getTextContent(),
+                                    lib.getNamedItem("license").getTextContent()),
+                            null,
+                            lib.getNamedItem("website").getTextContent(),
+                            lib.getNamedItem("licenseText").getTextContent()));
+                }
+                emitter.onSuccess(licenses);
+            } catch (Exception e) {
+                emitter.onError(e);
             }
-            emitter.onSuccess(licenses);
         })
         .subscribeOn(Schedulers.io())
         .observeOn(AndroidSchedulers.mainThread())
@@ -68,7 +71,6 @@ public class LicensesFragment extends ListFragment {
                 developers -> setListAdapter(new SimpleIconListAdapter<LicenseItem>(getContext(), developers)),
                 error -> Toast.makeText(getContext(), error.getMessage(), Toast.LENGTH_LONG).show()
         );
-
     }
 
     private static class LicenseItem extends SimpleIconListAdapter.ListItem {
@@ -100,9 +102,8 @@ public class LicensesFragment extends ListFragment {
     }
 
     private void showLicenseText(String licenseTextFile) {
-        try {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(
-                    getContext().getAssets().open(licenseTextFile), "UTF-8"));
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                getContext().getAssets().open(licenseTextFile), "UTF-8"))) {
             StringBuilder licenseText = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {
